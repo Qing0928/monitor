@@ -5,6 +5,7 @@ from mediapipe.tasks.python import vision
 from mediapipe import solutions
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
+import time
 #----init setting----
 #monitor
 monitor = cv2.VideoCapture("rtsp://admin:@admin888@192.168.11.197:554")
@@ -31,33 +32,6 @@ annotated_image = draw_landmarks_on_image(image.numpy_view(), detection_result)
 #cv2.imshow("detect_result", cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR))
 cv2.imshow("detect_result", annotated_image)
 cv2.waitKey(0)
-'''
-
-def draw_landmarks_on_image(rgb_image, detection_result):
-  pose_landmarks_list = detection_result.pose_landmarks
-  annotated_image = np.copy(rgb_image)
-
-  # Loop through the detected poses to visualize.
-  for idx in range(len(pose_landmarks_list)):
-    pose_landmarks = pose_landmarks_list[idx]
-
-    # Draw the pose landmarks.
-    pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
-    #extend有點類似add，不過是把一個list加進另一個list
-    
-    pose_landmarks_proto.landmark.extend([
-      landmark_pb2
-      .NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) for landmark in pose_landmarks
-    ])
-    solutions.drawing_utils.draw_landmarks(
-      annotated_image,
-      pose_landmarks_proto,
-      solutions.pose.POSE_CONNECTIONS,
-      solutions.drawing_styles.get_default_pose_landmarks_style())
-  return annotated_image
-
-def async_result(detect_result:mp.tasks.vision.PoseLandmarkerResult, result_image:mp.Image, timestamp:int):
-   detect_result = detect_result
 
 # STEP 2: Create an PoseLandmarker object.
 base_options = python.BaseOptions(model_asset_path='monitor/pose_landmarker_full.task')
@@ -68,6 +42,28 @@ options = vision.PoseLandmarkerOptions(
     output_segmentation_masks=False)
 detector = vision.PoseLandmarker.create_from_options(options)
 
+def draw_landmarks_on_image(rgb_image, detection_result):
+    pose_landmarks_list = detection_result.pose_landmarks
+    annotated_image = np.copy(rgb_image)
+
+    # Loop through the detected poses to visualize.
+    for idx in range(len(pose_landmarks_list)):
+      pose_landmarks = pose_landmarks_list[idx]
+
+      # Draw the pose landmarks.
+      pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+      #extend有點類似add，不過是把一個list加進另一個list
+      
+      pose_landmarks_proto.landmark.extend([
+        landmark_pb2
+        .NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) for landmark in pose_landmarks
+      ])
+      solutions.drawing_utils.draw_landmarks(
+        annotated_image,
+        pose_landmarks_proto,
+        solutions.pose.POSE_CONNECTIONS,
+        solutions.drawing_styles.get_default_pose_landmarks_style())
+    return annotated_image
 while(True):
     if(monitor.isOpened == False):
         monitor.open()
@@ -82,7 +78,6 @@ while(True):
         #patch = frame[230:340, 825:970, :]
         #patch = cv2.resize(patch,(200, 120))
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-        
         detection_result = detector.detect(image)
         annotated_image = draw_landmarks_on_image(image.numpy_view(), detection_result)
         video_writer.write(annotated_image)
@@ -90,6 +85,90 @@ while(True):
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
+'''
+class PoseLandmarker_result():
+  def __init__(self):
+    self.result = None
+    self.landmarker = mp.tasks.vision.PoseLandmarker
+    self.initLandmarker()
+
+  def initLandmarker(self):
+    def updateResult(result:mp.tasks.vision.PoseLandmarkerResult, output_image:mp.Image, timestamp:int):
+      self.result = result
+      
+
+    options = mp.tasks.vision.PoseLandmarkerOptions(
+       base_options = mp.tasks.BaseOptions(model_asset_path = 'monitor/pose_landmarker_full.task'),
+       running_mode = mp.tasks.vision.RunningMode.LIVE_STREAM,
+       result_callback = updateResult)
+    
+    self.landmarker = self.landmarker.create_from_options(options)
+
+  def detect_async(self, frame):
+     image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+     self.landmarker.detect_async(image=image, timestamp_ms=int(time.time()*1000))
+  
+  def close(self):
+     self.landmarker.close()
+
+def draw_landmarks_on_image(rgb_image, detect_result):
+  #try:
+    #print(detect_result)
+    if detect_result.pose_landmarks == []:
+        return rgb_image
+    else:
+      pose_landmarks_list = detect_result.pose_landmarks
+      #rgb_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+      annotated_image = np.copy(rgb_image)
+
+      # Loop through the detected poses to visualize.
+      for idx in range(len(pose_landmarks_list)):
+        pose_landmarks = pose_landmarks_list[idx]
+
+        # Draw the pose landmarks.
+        pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+        #extend有點類似add，不過是把一個list加進另一個list
+            
+        pose_landmarks_proto.landmark.extend([
+            landmark_pb2
+            .NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) for landmark in pose_landmarks
+          ])
+        solutions.drawing_utils.draw_landmarks(
+          annotated_image,
+          pose_landmarks_proto,
+          solutions.pose.POSE_CONNECTIONS,
+          solutions.drawing_styles.get_default_pose_landmarks_style())
+      return annotated_image
+  #except Exception as e:
+       #print(e)
+       #return rgb_image
+
+  
+pose_land_marker = PoseLandmarker_result()
+
+while(True):
+    if(monitor.isOpened == False):
+        monitor.open()
+    ret, frame = monitor.read()
+    if(ret == False):
+        print("mointor ERROR")
+        break
+    else:
+        pose_land_marker.detect_async(frame)
+        if hasattr(pose_land_marker.result, 'pose_landmarks') == True:
+          #print(pose_land_marker.result.pose_landmarks)
+          #image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+          annotated_image = draw_landmarks_on_image(frame, pose_land_marker.result)
+          cv2.imshow("mointor", annotated_image)
+        else:
+           print("fail")
+        #annotated_image = pose_land_marker.draw_landmarks_on_image(frame)
+        #video_writer.write(annotated_image)
+        #cv2.imshow("mointor", annotated_image)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+pose_land_marker.close()
 monitor.release()
 video_writer.release()
 cv2.destroyAllWindows()
