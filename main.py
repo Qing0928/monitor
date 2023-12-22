@@ -1,7 +1,5 @@
 import cv2
 import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
 from mediapipe import solutions
 from mediapipe.framework.formats import landmark_pb2
 import numpy as np
@@ -98,7 +96,7 @@ class PoseLandmarker_result():
       
 
     options = mp.tasks.vision.PoseLandmarkerOptions(
-       base_options = mp.tasks.BaseOptions(model_asset_path = 'monitor/pose_landmarker_full.task'),
+       base_options = mp.tasks.BaseOptions(model_asset_path = 'monitor/pose_landmarker_lite.task'),
        running_mode = mp.tasks.vision.RunningMode.LIVE_STREAM,
        result_callback = updateResult)
     
@@ -118,6 +116,7 @@ def draw_landmarks_on_image(rgb_image, detect_result):
         return rgb_image
     else:
       pose_landmarks_list = detect_result.pose_landmarks
+      #detect_async已經轉換過圖片格式
       #rgb_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
       annotated_image = np.copy(rgb_image)
 
@@ -142,7 +141,6 @@ def draw_landmarks_on_image(rgb_image, detect_result):
   #except Exception as e:
        #print(e)
        #return rgb_image
-
   
 pose_land_marker = PoseLandmarker_result()
 
@@ -157,15 +155,15 @@ while(True):
         pose_land_marker.detect_async(frame)
         if hasattr(pose_land_marker.result, 'pose_landmarks') == True:
           #print(pose_land_marker.result.pose_landmarks)
-          #image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+          
           annotated_image = draw_landmarks_on_image(frame, pose_land_marker.result)
+          video_writer.write(annotated_image)
+
           cv2.imshow("mointor", annotated_image)
         else:
            print("fail")
-        #annotated_image = pose_land_marker.draw_landmarks_on_image(frame)
-        #video_writer.write(annotated_image)
-        #cv2.imshow("mointor", annotated_image)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+        
+    if cv2.waitKey(2) & 0xFF == ord('q'):
         break
 
 pose_land_marker.close()
